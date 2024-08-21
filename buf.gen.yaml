@@ -1,0 +1,25 @@
+version: v2
+clean: true
+
+inputs:
+  - directory: proto/
+
+managed:
+  enabled: true
+  override:
+    # this is required now
+    - file_option: go_package_prefix
+      value: github.com/lcmaguire/protoc-gen-go-boilerplate/gen
+
+# 'clean', when set to true, deletes the directories, zip files, and/or jar files specified in the `out` field for
+# all plugins before running code generation.
+plugins:
+  - local: protoc-gen-go-boilerplate
+    out: service
+    opt: paths=source_relative
+  - local: protoc-gen-go
+    out: gen
+    opt: paths=source_relative
+  - local: protoc-gen-go-grpc
+    out: gen
+    opt: paths=source_relative
