@@ -25,7 +25,6 @@ const (
 )
 
 func main() {
-	// todo set up custom templates.
 	var flags flag.FlagSet
 	customMethodTemplate := flags.String("methodTemplate", "", "custom method template")
 	customServiceTemplate := flags.String("serviceTemplate", "", "custom service template")
@@ -104,12 +103,13 @@ type Service struct {
 	// ServiceGoImportPath used for services
 	ServiceGoImportPath string
 
-	// ConnectGoImportPath ...
+	// ConnectGoImportPath generated connect import path.
 	ConnectGoImportPath string
 
 	// FileGoPkgName ...
 	FileGoPkgName string
 
+	// ServiceGoPkg last dir in package.
 	ServiceGoPkg string
 
 	// ServiceName
