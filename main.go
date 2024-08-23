@@ -102,16 +102,12 @@ func messageImportPath(in *protogen.Message, f *protogen.GeneratedFile) string {
 type Service struct {
 	// ServiceGoImportPath used for services
 	ServiceGoImportPath string
-
 	// ConnectGoImportPath generated connect import path.
 	ConnectGoImportPath string
-
 	// FileGoPkgName ...
 	FileGoPkgName string
-
 	// ServiceGoPkg last dir in package.
 	ServiceGoPkg string
-
 	// ServiceName
 	ServiceName string
 	// Ident the pkg name.

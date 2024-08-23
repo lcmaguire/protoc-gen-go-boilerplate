@@ -18,8 +18,7 @@ plugins:
     out: service
     # may be worth wile having a dir opt.
     opt:
-      - methodTemplate=connect.method.go.tpl
-      - serviceTemplate=connect.service.go.tpl
+      - methodTemplate=method.fleshed.go.tpl
   - local: protoc-gen-go
     out: gen
     opt: paths=source_relative
