@@ -53,10 +53,12 @@ func main() {
 				pkgIdent := strings.Split(ident, ".")[0]
 
 				s := Service{
-					ServiceGoImportPath: string(file.GoDescriptorIdent.String()),
+					ServiceGoImportPath: file.GoDescriptorIdent.String(),
+					ConnectGoImportPath: connectPath(file).String(),
+					FileGoPkgName:       string(file.GoPackageName),
 					ServiceGoPkg:        pkgIdent,
-					Ident:               pkgIdent,
 					ServiceName:         service.GoName,
+					Ident:               pkgIdent,
 					ServerFullName:      string(service.Desc.FullName()),
 				}
 
