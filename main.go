@@ -2,7 +2,8 @@ package main
 
 import (
 	"bytes"
-	"fmt"
+	"embed"
+	"flag"
 	"strings"
 	"text/template"
 
@@ -10,40 +11,60 @@ import (
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
+// todo will need custom register of embeded files for types.
+
+//go:embed method.go.tpl
+var defaultMethodTemplate embed.FS
+
+//go:embed service.go.tpl
+var defaultServiceTemplate embed.FS
+
+const (
+	defaultMethodFilePath  = "method.go.tpl"
+	defaultServiceFilePath = "service.go.tpl"
+)
+
 func main() {
+	// todo set up custom templates.
+	var flags flag.FlagSet
+	customMethodTemplate := flags.String("methodTemplate", "", "custom method template")
+	customServiceTemplate := flags.String("serviceTemplate", "", "custom service template")
 
 	protogen.Options{
-		//	ParamFunc: flags.Set,
+		ParamFunc: flags.Set,
 	}.Run(func(gen *protogen.Plugin) error {
-
 		gen.SupportedFeatures = uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
+
 		for _, file := range gen.Files {
 			if !file.Generate {
 				continue
 			}
 
 			for _, service := range file.Services {
-
 				fileImportPath := protogen.GoImportPath(".")
 
 				sf := gen.NewGeneratedFile("service.go", fileImportPath)
 				sf.P("package " + file.GoPackageName)
 
 				// make sure this is imported for pkg.
-				_ = sf.QualifiedGoIdent(file.GoDescriptorIdent)
-				// generate go-grpc server.
-				sName := string(file.GoPackageName) + "." + unimplementedServerString(service.GoName)
+				ident := sf.QualifiedGoIdent(file.GoDescriptorIdent)
+
+				// generate service struct for go-grpc.
+				pkgIdent := strings.Split(ident, ".")[0]
 
 				s := Service{
-					UnimplementedServiceName: sName,
+					ServiceGoImportPath: string(file.GoDescriptorIdent.String()),
+					ServiceGoPkg:        pkgIdent,
+					Ident:               pkgIdent,
+					ServiceName:         service.GoName,
+					ServerFullName:      string(service.Desc.FullName()),
 				}
-				sf.P(ExecuteTemplate(ServiceTemplate, s))
 
-				//nf := gen.NewGeneratedFile(file.GeneratedFilenamePrefix+".go", fileImportPath)
-				//nf.P("package " + file.GoPackageName)
-
-				//i := protogen.GoIdent{GoName: "Context", GoImportPath: protogen.GoImportPath("context")}
-				//nf.QualifiedGoIdent(i)
+				serviceBites, err := s.RunTemplate(*customServiceTemplate)
+				if err != nil {
+					return err
+				}
+				sf.P(serviceBites)
 
 				for _, method := range service.Methods {
 					// snake case filename
@@ -53,18 +74,20 @@ func main() {
 					i := protogen.GoIdent{GoName: "Context", GoImportPath: protogen.GoImportPath("context")}
 					nf.QualifiedGoIdent(i)
 					m := Method{
-						MethodName:   method.GoName,
-						InputName:    messageImportPath(method.Input, nf),
-						ResponseName: messageImportPath(method.Output, nf),
+						MethodName:     method.GoName,
+						InputName:      messageImportPath(method.Input, nf),
+						ResponseName:   messageImportPath(method.Output, nf),
+						MethodFullName: string(method.Desc.FullName()),
 					}
 
-					str := ExecuteTemplate(MethodTemplate, m)
-					nf.P(str)
+					methodBites, err := m.RunTemplate(*customMethodTemplate)
+					if err != nil {
+						return err
+					}
+					nf.P(methodBites)
 				}
-
 			}
 		}
-
 		return nil
 	})
 }
@@ -74,112 +97,64 @@ func messageImportPath(in *protogen.Message, f *protogen.GeneratedFile) string {
 	return f.QualifiedGoIdent(in.GoIdent)
 }
 
-func unimplementedServerString(serviceName string) string {
-	return fmt.Sprintf("Unimplemented%sServer", serviceName)
-}
-
 // Service data regarding the service to be implemented.
 type Service struct {
-	UnimplementedServiceName string
+	// ServiceGoImportPath used for services
+	ServiceGoImportPath string
+
+	// ConnectGoImportPath ...
+	ConnectGoImportPath string
+
+	// FileGoPkgName ...
+	FileGoPkgName string
+
+	ServiceGoPkg string
+
+	// ServiceName
+	ServiceName string
+	// Ident the pkg name.
+	Ident string
+	// ServerFullName full service name e.g foo.bar.service.
+	ServerFullName string
 }
 
-// ServiceTemplate template represents the struct being generated to implement service.
-const ServiceTemplate = `
-type Service struct {
-	{{.UnimplementedServiceName}}
+func (s Service) RunTemplate(filePath ...string) (string, error) {
+	return generateTemplateData(s, defaultServiceTemplate, defaultServiceFilePath, filePath...)
 }
-`
 
 // Method contains all info for method generation.
 type Method struct {
 	// MethodName is the name of the RPC being implemented.
 	MethodName string
-
 	// InputName import path and type name e.g foo.Bar.
 	InputName string
 	// InputName import path and type name e.g foo.Bar.
 	ResponseName string
+	// MethodFullName full method name.
+	MethodFullName string
 }
 
-/*
-	perhaps via config
-	- functions  ()
-*/
+func (m Method) RunTemplate(filePath ...string) (string, error) {
+	return generateTemplateData(m, defaultMethodTemplate, defaultMethodFilePath, filePath...)
+}
 
-const MethodTemplate = `
-	// {{ .MethodName}} ...
-	func (s *Service) {{ .MethodName}}(ctx context.Context, in *{{ .InputName}} ) (*{{ .ResponseName}} , error) {
-		// validate request
-		err := validate{{ .MethodName}}Input(ctx, in)
-		if err != nil {
-			return nil, err
-		}
+func generateTemplateData(data any, embededFile embed.FS, defaultPath string, filePath ...string) (string, error) {
+	var templ *template.Template
+	var err error
 
-		// map to internal type
-		internalType, err := map{{ .MethodName}}InputToInternal(ctx, in)
-		if err != nil {
-			return nil, err
-		}
-
-		// perform any dowsntream requests prior to database interaction. 
-		downstreamResponse, err := s.preDatabaseDownstreams{{ .MethodName}}(ctx, internalType)
-		if err != nil {
-			return nil, err
-		}
-
-		// perform database operation
-		databaseResponse, err := s.databaseOp{{ .MethodName}}(ctx, downstreamResponse, internalType)
-		if err != nil {
-			return nil, err
-		}
-
-		// perform any dowsntream requests post database interaction. 
-		postDbDownstreamResponse, err := s.postDatabaseDownstreams{{ .MethodName}}(ctx, databaseResponse)
-		if err != nil {
-			return nil, err
-		}
-
-		// prepare response
-		return prepare{{ .MethodName}}Response(ctx, internalType, downstreamResponse, databaseResponse, postDbDownstreamResponse)
+	// if no override is provided use default.
+	if len(filePath) == 0 || filePath[0] == "" {
+		templ, err = template.ParseFS(embededFile, defaultPath)
+	} else {
+		templ, err = template.ParseFiles(filePath...)
 	}
 
-	func (s *Service) preDatabaseDownstreams{{ .MethodName}}(ctx context.Context, in any) (any, error){
-		return nil, nil
-	}
-
-	func (s *Service) databaseOp{{ .MethodName}}(ctx context.Context, downstreamResponse any, internalType any) (any, error){
-		return nil, nil
-	}
-	
-	func (s *Service) postDatabaseDownstreams{{ .MethodName}}(ctx context.Context, in any) (any, error){
-		return nil, nil
-	}
-
-	func validate{{ .MethodName}}Input(ctx context.Context, in *{{ .InputName}}) error {
-		return nil
-	}
-
-	func map{{ .MethodName}}InputToInternal(ctx context.Context, in *{{ .InputName}}) (any, error) {
-		return nil, nil
-	}
-
-	func prepare{{ .MethodName}}Response(ctx context.Context, downstreamResponse any, internalType any, databaseType any, postDbDownstreamResponse any) (*{{ .ResponseName}}, error) {
-		return nil, nil
-	}
-
-`
-
-// ExecuteTemplate something to implement templates.
-func ExecuteTemplate(tplate string, data any) string {
-	// todo read more about template library, see if it may be better to have one Template struct and re use it.
-	templ, err := template.New("").Parse(tplate)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
-
 	buffy := bytes.NewBuffer([]byte{})
 	if err := templ.Execute(buffy, data); err != nil {
-		panic(err)
+		return "", err
 	}
-	return buffy.String()
+	return buffy.String(), nil
 }

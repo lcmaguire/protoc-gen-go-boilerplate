@@ -1,9 +1,6 @@
 package temp
 
-import (
-	temp "github.com/lcmaguire/protoc-gen-go-boilerplate/gen/temp"
-)
-
+// Service connect implementation of proto.ExampleAPI.
 type Service struct {
-	temp.UnimplementedExampleAPIServer
+	tempconnect.UnimplementedExampleAPIHandler
 }
