@@ -39,19 +39,34 @@ const (
 	// ExampleAPIExampleAnyRpcProcedure is the fully-qualified name of the ExampleAPI's ExampleAnyRpc
 	// RPC.
 	ExampleAPIExampleAnyRpcProcedure = "/proto.ExampleAPI/ExampleAnyRpc"
+	// ExampleAPIExampleClientStreamProcedure is the fully-qualified name of the ExampleAPI's
+	// ExampleClientStream RPC.
+	ExampleAPIExampleClientStreamProcedure = "/proto.ExampleAPI/ExampleClientStream"
+	// ExampleAPIExampleServerStreamProcedure is the fully-qualified name of the ExampleAPI's
+	// ExampleServerStream RPC.
+	ExampleAPIExampleServerStreamProcedure = "/proto.ExampleAPI/ExampleServerStream"
+	// ExampleAPIExampleBidiStreamProcedure is the fully-qualified name of the ExampleAPI's
+	// ExampleBidiStream RPC.
+	ExampleAPIExampleBidiStreamProcedure = "/proto.ExampleAPI/ExampleBidiStream"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
-	exampleAPIServiceDescriptor             = temp.File_temp_temp_proto.Services().ByName("ExampleAPI")
-	exampleAPIExampleRpcMethodDescriptor    = exampleAPIServiceDescriptor.Methods().ByName("ExampleRpc")
-	exampleAPIExampleAnyRpcMethodDescriptor = exampleAPIServiceDescriptor.Methods().ByName("ExampleAnyRpc")
+	exampleAPIServiceDescriptor                   = temp.File_temp_temp_proto.Services().ByName("ExampleAPI")
+	exampleAPIExampleRpcMethodDescriptor          = exampleAPIServiceDescriptor.Methods().ByName("ExampleRpc")
+	exampleAPIExampleAnyRpcMethodDescriptor       = exampleAPIServiceDescriptor.Methods().ByName("ExampleAnyRpc")
+	exampleAPIExampleClientStreamMethodDescriptor = exampleAPIServiceDescriptor.Methods().ByName("ExampleClientStream")
+	exampleAPIExampleServerStreamMethodDescriptor = exampleAPIServiceDescriptor.Methods().ByName("ExampleServerStream")
+	exampleAPIExampleBidiStreamMethodDescriptor   = exampleAPIServiceDescriptor.Methods().ByName("ExampleBidiStream")
 )
 
 // ExampleAPIClient is a client for the proto.ExampleAPI service.
 type ExampleAPIClient interface {
 	ExampleRpc(context.Context, *connect.Request[temp.Example]) (*connect.Response[temp.Example], error)
 	ExampleAnyRpc(context.Context, *connect.Request[temp.Example]) (*connect.Response[anypb.Any], error)
+	ExampleClientStream(context.Context) *connect.ClientStreamForClient[temp.Example, temp.Example]
+	ExampleServerStream(context.Context, *connect.Request[temp.Example]) (*connect.ServerStreamForClient[temp.Example], error)
+	ExampleBidiStream(context.Context) *connect.BidiStreamForClient[temp.Example, temp.Example]
 }
 
 // NewExampleAPIClient constructs a client for the proto.ExampleAPI service. By default, it uses the
@@ -76,13 +91,34 @@ func NewExampleAPIClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(exampleAPIExampleAnyRpcMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		exampleClientStream: connect.NewClient[temp.Example, temp.Example](
+			httpClient,
+			baseURL+ExampleAPIExampleClientStreamProcedure,
+			connect.WithSchema(exampleAPIExampleClientStreamMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		exampleServerStream: connect.NewClient[temp.Example, temp.Example](
+			httpClient,
+			baseURL+ExampleAPIExampleServerStreamProcedure,
+			connect.WithSchema(exampleAPIExampleServerStreamMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		exampleBidiStream: connect.NewClient[temp.Example, temp.Example](
+			httpClient,
+			baseURL+ExampleAPIExampleBidiStreamProcedure,
+			connect.WithSchema(exampleAPIExampleBidiStreamMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // exampleAPIClient implements ExampleAPIClient.
 type exampleAPIClient struct {
-	exampleRpc    *connect.Client[temp.Example, temp.Example]
-	exampleAnyRpc *connect.Client[temp.Example, anypb.Any]
+	exampleRpc          *connect.Client[temp.Example, temp.Example]
+	exampleAnyRpc       *connect.Client[temp.Example, anypb.Any]
+	exampleClientStream *connect.Client[temp.Example, temp.Example]
+	exampleServerStream *connect.Client[temp.Example, temp.Example]
+	exampleBidiStream   *connect.Client[temp.Example, temp.Example]
 }
 
 // ExampleRpc calls proto.ExampleAPI.ExampleRpc.
@@ -95,10 +131,28 @@ func (c *exampleAPIClient) ExampleAnyRpc(ctx context.Context, req *connect.Reque
 	return c.exampleAnyRpc.CallUnary(ctx, req)
 }
 
+// ExampleClientStream calls proto.ExampleAPI.ExampleClientStream.
+func (c *exampleAPIClient) ExampleClientStream(ctx context.Context) *connect.ClientStreamForClient[temp.Example, temp.Example] {
+	return c.exampleClientStream.CallClientStream(ctx)
+}
+
+// ExampleServerStream calls proto.ExampleAPI.ExampleServerStream.
+func (c *exampleAPIClient) ExampleServerStream(ctx context.Context, req *connect.Request[temp.Example]) (*connect.ServerStreamForClient[temp.Example], error) {
+	return c.exampleServerStream.CallServerStream(ctx, req)
+}
+
+// ExampleBidiStream calls proto.ExampleAPI.ExampleBidiStream.
+func (c *exampleAPIClient) ExampleBidiStream(ctx context.Context) *connect.BidiStreamForClient[temp.Example, temp.Example] {
+	return c.exampleBidiStream.CallBidiStream(ctx)
+}
+
 // ExampleAPIHandler is an implementation of the proto.ExampleAPI service.
 type ExampleAPIHandler interface {
 	ExampleRpc(context.Context, *connect.Request[temp.Example]) (*connect.Response[temp.Example], error)
 	ExampleAnyRpc(context.Context, *connect.Request[temp.Example]) (*connect.Response[anypb.Any], error)
+	ExampleClientStream(context.Context, *connect.ClientStream[temp.Example]) (*connect.Response[temp.Example], error)
+	ExampleServerStream(context.Context, *connect.Request[temp.Example], *connect.ServerStream[temp.Example]) error
+	ExampleBidiStream(context.Context, *connect.BidiStream[temp.Example, temp.Example]) error
 }
 
 // NewExampleAPIHandler builds an HTTP handler from the service implementation. It returns the path
@@ -119,12 +173,36 @@ func NewExampleAPIHandler(svc ExampleAPIHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(exampleAPIExampleAnyRpcMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	exampleAPIExampleClientStreamHandler := connect.NewClientStreamHandler(
+		ExampleAPIExampleClientStreamProcedure,
+		svc.ExampleClientStream,
+		connect.WithSchema(exampleAPIExampleClientStreamMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	exampleAPIExampleServerStreamHandler := connect.NewServerStreamHandler(
+		ExampleAPIExampleServerStreamProcedure,
+		svc.ExampleServerStream,
+		connect.WithSchema(exampleAPIExampleServerStreamMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	exampleAPIExampleBidiStreamHandler := connect.NewBidiStreamHandler(
+		ExampleAPIExampleBidiStreamProcedure,
+		svc.ExampleBidiStream,
+		connect.WithSchema(exampleAPIExampleBidiStreamMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/proto.ExampleAPI/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ExampleAPIExampleRpcProcedure:
 			exampleAPIExampleRpcHandler.ServeHTTP(w, r)
 		case ExampleAPIExampleAnyRpcProcedure:
 			exampleAPIExampleAnyRpcHandler.ServeHTTP(w, r)
+		case ExampleAPIExampleClientStreamProcedure:
+			exampleAPIExampleClientStreamHandler.ServeHTTP(w, r)
+		case ExampleAPIExampleServerStreamProcedure:
+			exampleAPIExampleServerStreamHandler.ServeHTTP(w, r)
+		case ExampleAPIExampleBidiStreamProcedure:
+			exampleAPIExampleBidiStreamHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -140,4 +218,16 @@ func (UnimplementedExampleAPIHandler) ExampleRpc(context.Context, *connect.Reque
 
 func (UnimplementedExampleAPIHandler) ExampleAnyRpc(context.Context, *connect.Request[temp.Example]) (*connect.Response[anypb.Any], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("proto.ExampleAPI.ExampleAnyRpc is not implemented"))
+}
+
+func (UnimplementedExampleAPIHandler) ExampleClientStream(context.Context, *connect.ClientStream[temp.Example]) (*connect.Response[temp.Example], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("proto.ExampleAPI.ExampleClientStream is not implemented"))
+}
+
+func (UnimplementedExampleAPIHandler) ExampleServerStream(context.Context, *connect.Request[temp.Example], *connect.ServerStream[temp.Example]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("proto.ExampleAPI.ExampleServerStream is not implemented"))
+}
+
+func (UnimplementedExampleAPIHandler) ExampleBidiStream(context.Context, *connect.BidiStream[temp.Example, temp.Example]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("proto.ExampleAPI.ExampleBidiStream is not implemented"))
 }

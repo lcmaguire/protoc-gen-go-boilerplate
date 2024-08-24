@@ -20,8 +20,11 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	ExampleAPI_ExampleRpc_FullMethodName    = "/proto.ExampleAPI/ExampleRpc"
-	ExampleAPI_ExampleAnyRpc_FullMethodName = "/proto.ExampleAPI/ExampleAnyRpc"
+	ExampleAPI_ExampleRpc_FullMethodName          = "/proto.ExampleAPI/ExampleRpc"
+	ExampleAPI_ExampleAnyRpc_FullMethodName       = "/proto.ExampleAPI/ExampleAnyRpc"
+	ExampleAPI_ExampleClientStream_FullMethodName = "/proto.ExampleAPI/ExampleClientStream"
+	ExampleAPI_ExampleServerStream_FullMethodName = "/proto.ExampleAPI/ExampleServerStream"
+	ExampleAPI_ExampleBidiStream_FullMethodName   = "/proto.ExampleAPI/ExampleBidiStream"
 )
 
 // ExampleAPIClient is the client API for ExampleAPI service.
@@ -30,6 +33,9 @@ const (
 type ExampleAPIClient interface {
 	ExampleRpc(ctx context.Context, in *Example, opts ...grpc.CallOption) (*Example, error)
 	ExampleAnyRpc(ctx context.Context, in *Example, opts ...grpc.CallOption) (*anypb.Any, error)
+	ExampleClientStream(ctx context.Context, opts ...grpc.CallOption) (ExampleAPI_ExampleClientStreamClient, error)
+	ExampleServerStream(ctx context.Context, in *Example, opts ...grpc.CallOption) (ExampleAPI_ExampleServerStreamClient, error)
+	ExampleBidiStream(ctx context.Context, opts ...grpc.CallOption) (ExampleAPI_ExampleBidiStreamClient, error)
 }
 
 type exampleAPIClient struct {
@@ -58,12 +64,112 @@ func (c *exampleAPIClient) ExampleAnyRpc(ctx context.Context, in *Example, opts 
 	return out, nil
 }
 
+func (c *exampleAPIClient) ExampleClientStream(ctx context.Context, opts ...grpc.CallOption) (ExampleAPI_ExampleClientStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ExampleAPI_ServiceDesc.Streams[0], ExampleAPI_ExampleClientStream_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &exampleAPIExampleClientStreamClient{stream}
+	return x, nil
+}
+
+type ExampleAPI_ExampleClientStreamClient interface {
+	Send(*Example) error
+	CloseAndRecv() (*Example, error)
+	grpc.ClientStream
+}
+
+type exampleAPIExampleClientStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *exampleAPIExampleClientStreamClient) Send(m *Example) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *exampleAPIExampleClientStreamClient) CloseAndRecv() (*Example, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(Example)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *exampleAPIClient) ExampleServerStream(ctx context.Context, in *Example, opts ...grpc.CallOption) (ExampleAPI_ExampleServerStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ExampleAPI_ServiceDesc.Streams[1], ExampleAPI_ExampleServerStream_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &exampleAPIExampleServerStreamClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type ExampleAPI_ExampleServerStreamClient interface {
+	Recv() (*Example, error)
+	grpc.ClientStream
+}
+
+type exampleAPIExampleServerStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *exampleAPIExampleServerStreamClient) Recv() (*Example, error) {
+	m := new(Example)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *exampleAPIClient) ExampleBidiStream(ctx context.Context, opts ...grpc.CallOption) (ExampleAPI_ExampleBidiStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ExampleAPI_ServiceDesc.Streams[2], ExampleAPI_ExampleBidiStream_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &exampleAPIExampleBidiStreamClient{stream}
+	return x, nil
+}
+
+type ExampleAPI_ExampleBidiStreamClient interface {
+	Send(*Example) error
+	Recv() (*Example, error)
+	grpc.ClientStream
+}
+
+type exampleAPIExampleBidiStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *exampleAPIExampleBidiStreamClient) Send(m *Example) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *exampleAPIExampleBidiStreamClient) Recv() (*Example, error) {
+	m := new(Example)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ExampleAPIServer is the server API for ExampleAPI service.
 // All implementations must embed UnimplementedExampleAPIServer
 // for forward compatibility
 type ExampleAPIServer interface {
 	ExampleRpc(context.Context, *Example) (*Example, error)
 	ExampleAnyRpc(context.Context, *Example) (*anypb.Any, error)
+	ExampleClientStream(ExampleAPI_ExampleClientStreamServer) error
+	ExampleServerStream(*Example, ExampleAPI_ExampleServerStreamServer) error
+	ExampleBidiStream(ExampleAPI_ExampleBidiStreamServer) error
 	mustEmbedUnimplementedExampleAPIServer()
 }
 
@@ -76,6 +182,15 @@ func (UnimplementedExampleAPIServer) ExampleRpc(context.Context, *Example) (*Exa
 }
 func (UnimplementedExampleAPIServer) ExampleAnyRpc(context.Context, *Example) (*anypb.Any, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExampleAnyRpc not implemented")
+}
+func (UnimplementedExampleAPIServer) ExampleClientStream(ExampleAPI_ExampleClientStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method ExampleClientStream not implemented")
+}
+func (UnimplementedExampleAPIServer) ExampleServerStream(*Example, ExampleAPI_ExampleServerStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method ExampleServerStream not implemented")
+}
+func (UnimplementedExampleAPIServer) ExampleBidiStream(ExampleAPI_ExampleBidiStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method ExampleBidiStream not implemented")
 }
 func (UnimplementedExampleAPIServer) mustEmbedUnimplementedExampleAPIServer() {}
 
@@ -126,6 +241,79 @@ func _ExampleAPI_ExampleAnyRpc_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ExampleAPI_ExampleClientStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ExampleAPIServer).ExampleClientStream(&exampleAPIExampleClientStreamServer{stream})
+}
+
+type ExampleAPI_ExampleClientStreamServer interface {
+	SendAndClose(*Example) error
+	Recv() (*Example, error)
+	grpc.ServerStream
+}
+
+type exampleAPIExampleClientStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *exampleAPIExampleClientStreamServer) SendAndClose(m *Example) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *exampleAPIExampleClientStreamServer) Recv() (*Example, error) {
+	m := new(Example)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _ExampleAPI_ExampleServerStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(Example)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ExampleAPIServer).ExampleServerStream(m, &exampleAPIExampleServerStreamServer{stream})
+}
+
+type ExampleAPI_ExampleServerStreamServer interface {
+	Send(*Example) error
+	grpc.ServerStream
+}
+
+type exampleAPIExampleServerStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *exampleAPIExampleServerStreamServer) Send(m *Example) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _ExampleAPI_ExampleBidiStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ExampleAPIServer).ExampleBidiStream(&exampleAPIExampleBidiStreamServer{stream})
+}
+
+type ExampleAPI_ExampleBidiStreamServer interface {
+	Send(*Example) error
+	Recv() (*Example, error)
+	grpc.ServerStream
+}
+
+type exampleAPIExampleBidiStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *exampleAPIExampleBidiStreamServer) Send(m *Example) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *exampleAPIExampleBidiStreamServer) Recv() (*Example, error) {
+	m := new(Example)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ExampleAPI_ServiceDesc is the grpc.ServiceDesc for ExampleAPI service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -142,6 +330,23 @@ var ExampleAPI_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ExampleAPI_ExampleAnyRpc_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ExampleClientStream",
+			Handler:       _ExampleAPI_ExampleClientStream_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ExampleServerStream",
+			Handler:       _ExampleAPI_ExampleServerStream_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "ExampleBidiStream",
+			Handler:       _ExampleAPI_ExampleBidiStream_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "temp/temp.proto",
 }

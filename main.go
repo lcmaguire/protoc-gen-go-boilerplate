@@ -13,20 +13,39 @@ import (
 
 // todo will need custom register of embeded files for types.
 
-//go:embed method.go.tpl
-var defaultMethodTemplate embed.FS
+//go:embed templates/method.unary.go.tpl
+var defaultUnaryMethodTemplate embed.FS
+
+//go:embed templates/method.client.stream.go.tpl
+var defaultClientStreamingMethod embed.FS
+
+//go:embed templates/method.server.stream.go.tpl
+var defaultServerStreamingMethod embed.FS
+
+//go:embed templates/method.server.stream.go.tpl
+var defaultBidiStreamingMethod embed.FS
 
 //go:embed service.go.tpl
 var defaultServiceTemplate embed.FS
 
 const (
-	defaultMethodFilePath  = "method.go.tpl"
+	defaultUnaryMethodFilePath           = "templates/method.unary.go.tpl"
+	defaultClientStreamingMethodFilePath = "templates/method.client.stream.go.tpl"
+	defaultServerStreamingMethodFilePath = "templates/method.server.stream.go.tpl"
+	defaultBidiStreamingMethodFilePath   = "templates/method.server.stream.go.tpl"
+
 	defaultServiceFilePath = "service.go.tpl"
 )
 
 func main() {
 	var flags flag.FlagSet
-	customMethodTemplate := flags.String("methodTemplate", "", "custom method template")
+	// todo have multiple flags for this.
+	customUnaryMethodTemplate := flags.String("unaryMethodTemplate", "", "custom method template")
+	clientStreamMethodTemplate := flags.String("clientStreamMethodTemplate", "", "custom method template")
+	serverStreamMethodTemplate := flags.String("serverStreamMethodTemplate", "", "custom method template")
+	bidiStreamMethodTemplate := flags.String("bidiStreamMethodTemplate", "", "custom method template")
+
+	//
 	customServiceTemplate := flags.String("serviceTemplate", "", "custom service template")
 
 	protogen.Options{
@@ -46,7 +65,9 @@ func main() {
 				sf.P("package " + file.GoPackageName)
 
 				// make sure this is imported for pkg.
+				// todo seek a way to ommit this for connect / non standard gRPC services.
 				ident := sf.QualifiedGoIdent(file.GoDescriptorIdent)
+				sf.Import(file.GoImportPath) // import regardless
 
 				// generate service struct for go-grpc.
 				pkgIdent := strings.Split(ident, ".")[0]
@@ -72,16 +93,49 @@ func main() {
 					nf := gen.NewGeneratedFile(strings.ToLower(method.GoName)+".go", fileImportPath)
 					nf.P("package " + file.GoPackageName)
 
-					i := protogen.GoIdent{GoName: "Context", GoImportPath: protogen.GoImportPath("context")}
-					nf.QualifiedGoIdent(i)
+					//i := protogen.GoIdent{GoName: "Context", GoImportPath: protogen.GoImportPath("context")}
+					//nf.QualifiedGoIdent(i)
+
 					m := Method{
 						MethodName:     method.GoName,
+						MethodFullName: string(method.Desc.FullName()),
+						ServiceName:    service.GoName,
 						InputName:      messageImportPath(method.Input, nf),
 						ResponseName:   messageImportPath(method.Output, nf),
-						MethodFullName: string(method.Desc.FullName()),
+						Ident:          pkgIdent,
 					}
 
-					methodBites, err := m.RunTemplate(*customMethodTemplate)
+					// Will handle selecting appropriate template for method(s)
+					// based upon if they are unary or a streaming rpc.
+					methodTemplate := defaultUnaryMethodTemplate
+					methodFile := defaultUnaryMethodFilePath
+					overide := ""
+					if customUnaryMethodTemplate != nil {
+						overide = *customUnaryMethodTemplate
+					}
+
+					switch {
+					case method.Desc.IsStreamingServer() && method.Desc.IsStreamingClient():
+						methodFile = defaultBidiStreamingMethodFilePath
+						methodTemplate = defaultBidiStreamingMethod
+						if bidiStreamMethodTemplate != nil {
+							overide = *bidiStreamMethodTemplate
+						}
+					case method.Desc.IsStreamingServer():
+						methodFile = defaultServerStreamingMethodFilePath
+						methodTemplate = defaultServerStreamingMethod
+						if clientStreamMethodTemplate != nil {
+							overide = *serverStreamMethodTemplate
+						}
+					case method.Desc.IsStreamingClient():
+						methodFile = defaultClientStreamingMethodFilePath
+						methodTemplate = defaultClientStreamingMethod
+						if serverStreamMethodTemplate != nil {
+							overide = *clientStreamMethodTemplate
+						}
+					}
+
+					methodBites, err := m.RunTemplate(methodTemplate, methodFile, overide)
 					if err != nil {
 						return err
 					}
@@ -110,7 +164,7 @@ type Service struct {
 	ServiceGoPkg string
 	// ServiceName
 	ServiceName string
-	// Ident the pkg name.
+	// Ident the file pkg name.
 	Ident string
 	// ServerFullName full service name e.g foo.bar.service.
 	ServerFullName string
@@ -124,16 +178,21 @@ func (s Service) RunTemplate(filePath ...string) (string, error) {
 type Method struct {
 	// MethodName is the name of the RPC being implemented.
 	MethodName string
+	// MethodFullName full method name.
+	MethodFullName string
+	// ServiceName
+	ServiceName string
+	// Ident the file pkg name.
+	Ident string
+
 	// InputName import path and type name e.g foo.Bar.
 	InputName string
 	// InputName import path and type name e.g foo.Bar.
 	ResponseName string
-	// MethodFullName full method name.
-	MethodFullName string
 }
 
-func (m Method) RunTemplate(filePath ...string) (string, error) {
-	return generateTemplateData(m, defaultMethodTemplate, defaultMethodFilePath, filePath...)
+func (m Method) RunTemplate(defaultTemplate embed.FS, defaultPath string, filePath ...string) (string, error) {
+	return generateTemplateData(m, defaultTemplate, defaultPath, filePath...)
 }
 
 func generateTemplateData(data any, embededFile embed.FS, defaultPath string, filePath ...string) (string, error) {

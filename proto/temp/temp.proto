@@ -10,6 +10,12 @@ service ExampleAPI {
     rpc ExampleRpc(Example) returns (Example);
 
     rpc ExampleAnyRpc(Example) returns (google.protobuf.Any);
+
+    rpc ExampleClientStream(stream Example) returns (Example);
+
+    rpc ExampleServerStream(Example) returns (stream Example);
+
+    rpc ExampleBidiStream(stream Example) returns (stream Example);
 }
 
 message Example {
