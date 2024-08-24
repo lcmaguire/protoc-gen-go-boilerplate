@@ -1,7 +1,7 @@
 package temp
 
 import (
-	"github.com/lcmaguire/protoc-gen-go-boilerplate/gen/temp"
+	temp "github.com/lcmaguire/protoc-gen-go-boilerplate/gen/temp"
 )
 
 // Service implements proto.ExampleAPI.

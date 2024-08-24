@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"embed"
-	"errors"
 	"flag"
 	"strings"
 	"text/template"
@@ -23,7 +22,7 @@ var defaultClientStreamingMethod embed.FS
 //go:embed templates/method.server.stream.go.tpl
 var defaultServerStreamingMethod embed.FS
 
-//go:embed templates/method.server.stream.go.tpl
+//go:embed templates/method.bidi.stream.go.tpl
 var defaultBidiStreamingMethod embed.FS
 
 //go:embed templates/connect
@@ -36,7 +35,7 @@ const (
 	defaultUnaryMethodFilePath           = "templates/method.unary.go.tpl"
 	defaultClientStreamingMethodFilePath = "templates/method.client.stream.go.tpl"
 	defaultServerStreamingMethodFilePath = "templates/method.server.stream.go.tpl"
-	defaultBidiStreamingMethodFilePath   = "templates/method.server.stream.go.tpl"
+	defaultBidiStreamingMethodFilePath   = "templates/method.bidi.stream.go.tpl"
 	defaultServiceFilePath               = "templates/service.go.tpl"
 
 	defaultConnectUnaryMethodFilePath           = "templates/connect/connect.method.unary.go.tpl"
@@ -53,28 +52,13 @@ func main() {
 	clientStreamMethodTemplate := flags.String("clientStreamMethodTemplate", "", "custom method template")
 	serverStreamMethodTemplate := flags.String("serverStreamMethodTemplate", "", "custom method template")
 	bidiStreamMethodTemplate := flags.String("bidiStreamMethodTemplate", "", "custom method template")
-
-	rpcType := flags.String("rpc-type", "", "which gRPC version you are using, if left empty will assume standard gRPC, options supported are grpc & connect")
-
 	// todo support custom types with greater ease.
-
 	customServiceTemplate := flags.String("serviceTemplate", "", "custom service template")
 
 	protogen.Options{
 		ParamFunc: flags.Set,
 	}.Run(func(gen *protogen.Plugin) error {
 		gen.SupportedFeatures = uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
-
-		if rpcType != nil {
-			switch *rpcType {
-			case "", "grpc":
-
-			case "connect":
-
-			default:
-				return errors.New("abcdefg")
-			}
-		}
 
 		for _, file := range gen.Files {
 			if !file.Generate {
