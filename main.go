@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"flag"
 	"strings"
 	"text/template"
@@ -25,7 +26,10 @@ var defaultServerStreamingMethod embed.FS
 //go:embed templates/method.server.stream.go.tpl
 var defaultBidiStreamingMethod embed.FS
 
-//go:embed service.go.tpl
+//go:embed templates/connect
+var connectTemplates embed.FS
+
+//go:embed templates/service.go.tpl
 var defaultServiceTemplate embed.FS
 
 const (
@@ -33,8 +37,13 @@ const (
 	defaultClientStreamingMethodFilePath = "templates/method.client.stream.go.tpl"
 	defaultServerStreamingMethodFilePath = "templates/method.server.stream.go.tpl"
 	defaultBidiStreamingMethodFilePath   = "templates/method.server.stream.go.tpl"
+	defaultServiceFilePath               = "templates/service.go.tpl"
 
-	defaultServiceFilePath = "service.go.tpl"
+	defaultConnectUnaryMethodFilePath           = "templates/connect/connect.method.unary.go.tpl"
+	defaultConnectClientStreamingMethodFilePath = "templates/connect/connect.method.client.stream.go.tpl"
+	defaultConnectServerStreamingMethodFilePath = "templates/connect/connect.stream.go.tpl"
+	defaultConnectBidiStreamingMethodFilePath   = "templates//connect/connect.stream.go.tpl"
+	defaultConnectServiceFilePath               = "templates/connect/connect.service.go.tpl"
 )
 
 func main() {
@@ -45,13 +54,27 @@ func main() {
 	serverStreamMethodTemplate := flags.String("serverStreamMethodTemplate", "", "custom method template")
 	bidiStreamMethodTemplate := flags.String("bidiStreamMethodTemplate", "", "custom method template")
 
-	//
+	rpcType := flags.String("rpc-type", "", "which gRPC version you are using, if left empty will assume standard gRPC, options supported are grpc & connect")
+
+	// todo support custom types with greater ease.
+
 	customServiceTemplate := flags.String("serviceTemplate", "", "custom service template")
 
 	protogen.Options{
 		ParamFunc: flags.Set,
 	}.Run(func(gen *protogen.Plugin) error {
 		gen.SupportedFeatures = uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
+
+		if rpcType != nil {
+			switch *rpcType {
+			case "", "grpc":
+
+			case "connect":
+
+			default:
+				return errors.New("abcdefg")
+			}
+		}
 
 		for _, file := range gen.Files {
 			if !file.Generate {
@@ -92,9 +115,6 @@ func main() {
 					// snake case filename
 					nf := gen.NewGeneratedFile(strings.ToLower(method.GoName)+".go", fileImportPath)
 					nf.P("package " + file.GoPackageName)
-
-					//i := protogen.GoIdent{GoName: "Context", GoImportPath: protogen.GoImportPath("context")}
-					//nf.QualifiedGoIdent(i)
 
 					m := Method{
 						MethodName:     method.GoName,

@@ -1,14 +1,10 @@
 package temp
 
 import (
-	temp "github.com/lcmaguire/protoc-gen-go-boilerplate/gen/temp"
-)
-import (
-	connect "connectrpc.com/connect"
-	"context"
+	"github.com/lcmaguire/protoc-gen-go-boilerplate/gen/temp"
 )
 
-// ExampleBidiStream is a connect rpc implementation of proto.ExampleAPI.ExampleBidiStream.
-func (s *Service) ExampleBidiStream(ctx context.Context, in *connect.BidiStream[temp.Example, temp.Example]) error {
+// ExampleBidiStream implements proto.ExampleAPI.ExampleBidiStream.
+func (s *Service) ExampleBidiStream(in *temp.Example, svr temp.ExampleAPI_ExampleBidiStreamServer) error {
 	return nil
 }
