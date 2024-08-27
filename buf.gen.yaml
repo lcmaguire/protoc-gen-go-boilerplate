@@ -18,11 +18,11 @@ plugins:
     out: service
     # may be worth wile having a dir opt.
     opt:
-      #- serviceTemplate=templates/connect/connect.service.go.tpl
-      #- unaryMethodTemplate=templates/connect/connect.method.go.tpl
-      #- clientStreamMethodTemplate=templates/connect/connect.method.client.stream.go.tpl
-      #- clientStreamMethodTemplate=templates/connect/connect.method.server.stream.go.tpl
-      #- bidiStreamMethodTemplate=templates/connect/connect.method.bidi.stream.go.tpl
+      - serviceTemplate=templates/connect/connect.service.go.tpl
+      - unaryMethodTemplate=templates/connect/connect.method.go.tpl
+      - clientStreamMethodTemplate=templates/connect/connect.method.client.stream.go.tpl
+      - serverStreamMethodTemplate=templates/connect/connect.method.server.stream.go.tpl
+      - bidiStreamMethodTemplate=templates/connect/connect.method.bidi.stream.go.tpl
   - local: protoc-gen-go
     out: gen
     opt: paths=source_relative
