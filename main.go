@@ -66,9 +66,7 @@ func main() {
 			}
 
 			for _, service := range file.Services {
-				fileImportPath := protogen.GoImportPath(".")
-
-				sf := gen.NewGeneratedFile("service.go", fileImportPath)
+				sf := gen.NewGeneratedFile("service.go", ".")
 				sf.P("package " + file.GoPackageName)
 
 				// imports
@@ -78,30 +76,10 @@ func main() {
 				// generate service struct for go-grpc.
 				pkgIdent := strings.Split(ident, ".")[0]
 
-				s := Service{
-					ServiceGoImportPath: file.GoDescriptorIdent.String(),
-					ConnectGoImportPath: connectPath(file).String(),
-					FileGoPkgName:       string(file.GoPackageName),
-					ServiceGoPkg:        pkgIdent,
-					ServiceName:         service.GoName,
-					Ident:               pkgIdent,
-					ServerFullName:      string(service.Desc.FullName()),
-				}
-
-				serviceBites, err := s.RunTemplate(*customServiceTemplate)
-				if err != nil {
-					return err
-				}
-				sf.P(serviceBites)
-
-				// will tidy the imports of the generated service file.
-				err = tidyImports(gen, sf, imports.LocalPrefix+"service.go")
-				if err != nil {
-					return err
-				}
+				methods := make([]Method, 0, len(service.Methods))
 
 				for _, method := range service.Methods {
-					nf := gen.NewGeneratedFile(strings.ToLower(method.GoName)+".go", fileImportPath)
+					nf := gen.NewGeneratedFile(strings.ToLower(method.GoName)+".go", ".")
 					nf.P("package " + file.GoPackageName)
 
 					m := Method{
@@ -111,6 +89,7 @@ func main() {
 						InputName:      messageImportPath(method.Input, nf),
 						ResponseName:   messageImportPath(method.Output, nf),
 						Ident:          pkgIdent,
+						Method:         method,
 					}
 
 					// Will handle selecting appropriate template for method(s)
@@ -153,6 +132,32 @@ func main() {
 					if err != nil {
 						return err
 					}
+
+					methods = append(methods, m)
+				}
+
+				s := Service{
+					ServiceGoImportPath: file.GoDescriptorIdent.String(),
+					ConnectGoImportPath: connectPath(file).String(),
+					FileGoPkgName:       string(file.GoPackageName),
+					ServiceGoPkg:        pkgIdent,
+					ServiceName:         service.GoName,
+					Ident:               pkgIdent,
+					ServerFullName:      string(service.Desc.FullName()),
+					Methods:             methods,
+					Service:             service,
+				}
+
+				serviceBites, err := s.RunTemplate(*customServiceTemplate)
+				if err != nil {
+					return err
+				}
+				sf.P(serviceBites)
+
+				// will tidy the imports of the generated service file.
+				err = tidyImports(gen, sf, imports.LocalPrefix+"service.go")
+				if err != nil {
+					return err
 				}
 			}
 		}
@@ -189,48 +194,6 @@ func tidyImports(gen *protogen.Plugin, generatedFile *protogen.GeneratedFile, fi
 // assumption this is always going to be in a different package.
 func messageImportPath(in *protogen.Message, f *protogen.GeneratedFile) string {
 	return f.QualifiedGoIdent(in.GoIdent)
-}
-
-// Service data regarding the service to be implemented.
-type Service struct {
-	// ServiceGoImportPath used for services
-	ServiceGoImportPath string
-	// ConnectGoImportPath generated connect import path.
-	ConnectGoImportPath string
-	// FileGoPkgName ...
-	FileGoPkgName string
-	// ServiceGoPkg last dir in package.
-	ServiceGoPkg string
-	// ServiceName
-	ServiceName string
-	// Ident the file pkg name.
-	Ident string
-	// ServerFullName full service name e.g foo.bar.service.
-	ServerFullName string
-}
-
-func (s Service) RunTemplate(filePath ...string) (string, error) {
-	return generateTemplateData(s, defaultServiceTemplate, defaultServiceFilePath, filePath...)
-}
-
-// Method contains all info for method generation.
-type Method struct {
-	// MethodName is the name of the RPC being implemented.
-	MethodName string
-	// MethodFullName full method name.
-	MethodFullName string
-	// ServiceName
-	ServiceName string
-	// Ident the file pkg name.
-	Ident string
-	// InputName import path and type name e.g foo.Bar.
-	InputName string
-	// InputName import path and type name e.g foo.Bar.
-	ResponseName string
-}
-
-func (m Method) RunTemplate(defaultTemplate embed.FS, defaultPath string, filePath ...string) (string, error) {
-	return generateTemplateData(m, defaultTemplate, defaultPath, filePath...)
 }
 
 func generateTemplateData(data any, embededFile embed.FS, defaultPath string, filePath ...string) (string, error) {
