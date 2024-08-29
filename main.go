@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"embed"
 	"flag"
+	"go/format"
 	"strings"
 	"text/template"
 
+	"golang.org/x/tools/imports"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/types/pluginpb"
 )
@@ -47,12 +49,10 @@ const (
 
 func main() {
 	var flags flag.FlagSet
-	// todo have multiple flags for this.
 	customUnaryMethodTemplate := flags.String("unaryMethodTemplate", "", "custom method template")
 	clientStreamMethodTemplate := flags.String("clientStreamMethodTemplate", "", "custom method template")
 	serverStreamMethodTemplate := flags.String("serverStreamMethodTemplate", "", "custom method template")
 	bidiStreamMethodTemplate := flags.String("bidiStreamMethodTemplate", "", "custom method template")
-	// todo support custom types with greater ease.
 	customServiceTemplate := flags.String("serviceTemplate", "", "custom service template")
 
 	protogen.Options{
@@ -71,10 +71,9 @@ func main() {
 				sf := gen.NewGeneratedFile("service.go", fileImportPath)
 				sf.P("package " + file.GoPackageName)
 
-				// make sure this is imported for pkg.
-				// todo seek a way to ommit this for connect / non standard gRPC services.
+				// imports
 				ident := sf.QualifiedGoIdent(file.GoDescriptorIdent)
-				sf.Import(file.GoImportPath) // import regardless
+				sf.Import(file.GoImportPath)
 
 				// generate service struct for go-grpc.
 				pkgIdent := strings.Split(ident, ".")[0]
@@ -95,8 +94,13 @@ func main() {
 				}
 				sf.P(serviceBites)
 
+				// will tidy the imports of the generated service file.
+				err = tidyImports(gen, sf, imports.LocalPrefix+"service.go")
+				if err != nil {
+					return err
+				}
+
 				for _, method := range service.Methods {
-					// snake case filename
 					nf := gen.NewGeneratedFile(strings.ToLower(method.GoName)+".go", fileImportPath)
 					nf.P("package " + file.GoPackageName)
 
@@ -113,9 +117,9 @@ func main() {
 					// based upon if they are unary or a streaming rpc.
 					methodTemplate := defaultUnaryMethodTemplate
 					methodFile := defaultUnaryMethodFilePath
-					overide := ""
+					override := ""
 					if customUnaryMethodTemplate != nil {
-						overide = *customUnaryMethodTemplate
+						override = *customUnaryMethodTemplate
 					}
 
 					switch {
@@ -123,32 +127,63 @@ func main() {
 						methodFile = defaultBidiStreamingMethodFilePath
 						methodTemplate = defaultBidiStreamingMethod
 						if bidiStreamMethodTemplate != nil {
-							overide = *bidiStreamMethodTemplate
+							override = *bidiStreamMethodTemplate
 						}
 					case method.Desc.IsStreamingServer():
 						methodFile = defaultServerStreamingMethodFilePath
 						methodTemplate = defaultServerStreamingMethod
 						if clientStreamMethodTemplate != nil {
-							overide = *serverStreamMethodTemplate
+							override = *serverStreamMethodTemplate
 						}
 					case method.Desc.IsStreamingClient():
 						methodFile = defaultClientStreamingMethodFilePath
 						methodTemplate = defaultClientStreamingMethod
 						if serverStreamMethodTemplate != nil {
-							overide = *clientStreamMethodTemplate
+							override = *clientStreamMethodTemplate
 						}
 					}
 
-					methodBites, err := m.RunTemplate(methodTemplate, methodFile, overide)
+					methodBites, err := m.RunTemplate(methodTemplate, methodFile, override)
 					if err != nil {
 						return err
 					}
 					nf.P(methodBites)
+					// will tidy the imports of the generated method file.
+					err = tidyImports(gen, nf, imports.LocalPrefix+strings.ToLower(method.GoName)+".go")
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
 		return nil
 	})
+}
+
+// tidyImports will format imports into one import group and will remove any unused imports.
+//
+// does this via skipping the provided generatedFile & recreating an identical file with the same content but formatted.
+func tidyImports(gen *protogen.Plugin, generatedFile *protogen.GeneratedFile, fileName string) error {
+	bites, err := generatedFile.Content()
+	if err != nil {
+		return err
+	}
+
+	bites, err = format.Source(bites)
+	if err != nil {
+		return err
+	}
+
+	bites, err = imports.Process(fileName, bites, nil) // opt nil will result in default behaviour.
+	if err != nil {
+		return err
+	}
+	generatedFile.Skip()
+
+	// will recreate an identical file but with the imports in order.
+	newFile := gen.NewGeneratedFile(fileName, ".")
+	newFile.P(string(bites))
+	return nil
 }
 
 // assumption this is always going to be in a different package.
@@ -188,7 +223,6 @@ type Method struct {
 	ServiceName string
 	// Ident the file pkg name.
 	Ident string
-
 	// InputName import path and type name e.g foo.Bar.
 	InputName string
 	// InputName import path and type name e.g foo.Bar.
@@ -203,7 +237,7 @@ func generateTemplateData(data any, embededFile embed.FS, defaultPath string, fi
 	var templ *template.Template
 	var err error
 
-	// if no override is provided use default.
+	// if no override is provided will use default.
 	if len(filePath) == 0 || filePath[0] == "" {
 		templ, err = template.ParseFS(embededFile, defaultPath)
 	} else {

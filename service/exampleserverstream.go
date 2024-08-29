@@ -2,9 +2,13 @@ package temp
 
 import (
 	temp "github.com/lcmaguire/protoc-gen-go-boilerplate/gen/temp"
+
+	"context"
+
+	connect "connectrpc.com/connect"
 )
 
-// ExampleServerStream implements proto.ExampleAPI.ExampleServerStream.
-func (s *Service) ExampleServerStream(in *temp.Example, svr temp.ExampleAPI_ExampleServerStreamServer) error {
-	return nil
+// ExampleServerStream implements ExampleServerStream
+func (s *Service) ExampleServerStream(ctx context.Context, in *connect.Request[temp.Example]) (*connect.ServerStream[temp.Example], error) {
+	return nil, nil
 }
