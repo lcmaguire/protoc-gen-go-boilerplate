@@ -14,19 +14,8 @@ import (
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
-// todo will need custom register of embeded files for types.
-
-//go:embed templates/method.unary.go.tmpl
-var defaultUnaryMethodTemplate embed.FS
-
-//go:embed templates/service.go.tmpl
-var defaultServiceTemplate embed.FS
-
 //go:embed templates/*
-var grpcTemplates embed.FS
-
-//go:embed templates/connect/*
-var connectTemplates embed.FS
+var embeddedTemplates embed.FS
 
 const (
 	// default dirPath
@@ -37,8 +26,7 @@ const (
 	clientStreamMethodSuffix = "method.client.stream.go.tmpl"
 	bidiStreamMethodSuffix   = "method.bidi.stream.go.tmpl"
 
-	defaultServiceFilePath = "templates/service.go.tmpl"
-	serviceSuffix          = "service.go.tmpl"
+	serviceSuffix = "service.go.tmpl"
 )
 
 func main() {
@@ -71,7 +59,7 @@ func main() {
 			for _, service := range file.Services {
 				serviceFileName := strings.ToLower(filepath.Join(service.GoName, "service.go"))
 				sf := gen.NewGeneratedFile(serviceFileName, ".")
-				//sf.P("package " + file.GoPackageName) // todo move this into template.
+				sf.P("package " + file.GoPackageName)
 
 				// imports
 				ident := sf.QualifiedGoIdent(file.GoDescriptorIdent)
@@ -86,7 +74,7 @@ func main() {
 				for _, method := range service.Methods {
 					fileName := strings.ToLower(filepath.Join(service.GoName, method.GoName+".go"))
 					nf := gen.NewGeneratedFile(fileName, ".")
-					// nf.P("package " + file.GoPackageName)
+					nf.P("package " + file.GoPackageName)
 
 					m := Method{
 						MethodName:     method.GoName,
@@ -98,35 +86,34 @@ func main() {
 						Method:         method,
 					}
 
-					methodFile := filepath.Join(directory, unaryMethodSuffix)
-					override := ""
-					if customUnaryMethodTemplate != nil {
-						override = *customUnaryMethodTemplate
-					}
-
+					methodSuffix := ""
+					var overrideFile *string
 					switch {
 					case method.Desc.IsStreamingServer() && method.Desc.IsStreamingClient():
-						methodFile = filepath.Join(directory, bidiStreamMethodSuffix)
-						if bidiStreamMethodTemplate != nil {
-							override = *bidiStreamMethodTemplate
-						}
+						methodSuffix = bidiStreamMethodSuffix
+						overrideFile = bidiStreamMethodTemplate
 					case method.Desc.IsStreamingServer():
-						methodFile = filepath.Join(directory, serverStreamMethodSuffix)
-						if clientStreamMethodTemplate != nil {
-							override = *serverStreamMethodTemplate
-						}
+						methodSuffix = serverStreamMethodSuffix
+						overrideFile = serverStreamMethodTemplate
 					case method.Desc.IsStreamingClient():
-						methodFile = filepath.Join(directory, clientStreamMethodSuffix)
-						if serverStreamMethodTemplate != nil {
-							override = *clientStreamMethodTemplate
-						}
+						methodSuffix = clientStreamMethodSuffix
+						overrideFile = clientStreamMethodTemplate
+					default:
+						methodSuffix = unaryMethodSuffix
+						overrideFile = customUnaryMethodTemplate
 					}
 
-					methodBites, err := m.RunTemplate(methodFile, override)
+					currentTemplate, err := loadTemplates(directory, methodSuffix, overrideFile)
 					if err != nil {
 						return err
 					}
-					nf.P(methodBites)
+
+					buffy := bytes.NewBuffer([]byte{})
+					if err := currentTemplate.Execute(buffy, m); err != nil {
+						return err
+					}
+
+					nf.P(buffy.String())
 					// will tidy the imports of the generated method file.
 					err = tidyImports(gen, nf, fileName)
 					if err != nil {
@@ -147,13 +134,16 @@ func main() {
 					Ident:               pkgIdent,
 				}
 
-				serviceFile := filepath.Join(directory, serviceSuffix)
-
-				serviceBites, err := s.RunTemplate(serviceFile, *customServiceTemplate)
+				serviceT, err := loadTemplates(directory, serviceSuffix, customServiceTemplate)
 				if err != nil {
 					return err
 				}
-				sf.P(serviceBites)
+
+				buffy := bytes.NewBuffer([]byte{})
+				if err := serviceT.Execute(buffy, s); err != nil {
+					return err
+				}
+				sf.P(buffy.String())
 
 				// will tidy the imports of the generated service file.
 				err = tidyImports(gen, sf, serviceFileName)
@@ -164,6 +154,14 @@ func main() {
 		}
 		return nil
 	})
+}
+
+func loadTemplates(dir string, suffix string, override *string) (*template.Template, error) {
+	if override != nil && len(*override) > 0 {
+		return template.ParseFiles(*override)
+	}
+
+	return template.ParseFS(embeddedTemplates, filepath.Join(dir, suffix))
 }
 
 // tidyImports will format imports into one import group and will remove any unused imports.
