@@ -15,7 +15,8 @@ managed:
 # all plugins before running code generation.
 plugins:
   - local: protoc-gen-go-boilerplate
-    out: example
+    out: example-override
+    opt: unaryMethodTemplate=method.fleshed.go.tpl
   - local: protoc-gen-go
     out: gen
     opt: paths=source_relative

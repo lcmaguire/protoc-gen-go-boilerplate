@@ -26,6 +26,7 @@ type Service struct {
 	Service *protogen.Service
 }
 
-func (s Service) RunTemplate(filePath ...string) (string, error) {
-	return generateTemplateData(s, defaultServiceTemplate, defaultServiceFilePath, filePath...)
+// RunTemplate will execute the template.
+func (s Service) RunTemplate(defaultPath string, filePath ...string) (string, error) {
+	return generateTemplateData(s, defaultPath, filePath...)
 }

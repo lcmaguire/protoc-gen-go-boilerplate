@@ -1,8 +1,6 @@
 package main
 
 import (
-	"embed"
-
 	"google.golang.org/protobuf/compiler/protogen"
 )
 
@@ -11,19 +9,22 @@ type Method struct {
 	// MethodName is the name of the RPC being implemented.
 	MethodName string
 	// MethodFullName full method name.
+	//
+	// example.service.MethodName
 	MethodFullName string
-	// ServiceName
+	// ServiceName is the name of the service to which the method belongs.
 	ServiceName string
 	// Ident the file pkg name.
 	Ident string
 	// InputName import path and type name e.g foo.Bar.
 	InputName string
-	// InputName import path and type name e.g foo.Bar.
+	// ResponseName import path and type name for the rpc response e.g foo.Bar.
 	ResponseName string
 	// Method *protogen.Method.
 	Method *protogen.Method
 }
 
-func (m Method) RunTemplate(defaultTemplate embed.FS, defaultPath string, filePath ...string) (string, error) {
-	return generateTemplateData(m, defaultTemplate, defaultPath, filePath...)
+// RunTemplate will execute the template.
+func (m Method) RunTemplate(defaultPath string, filePath ...string) (string, error) {
+	return generateTemplateData(m, defaultPath, filePath...)
 }

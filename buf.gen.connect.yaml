@@ -15,7 +15,9 @@ managed:
 # all plugins before running code generation.
 plugins:
   - local: protoc-gen-go-boilerplate
-    out: example
+    out: example-connect
+    opt:
+      - templateDirectory=templates/connect
   - local: protoc-gen-go
     out: gen
     opt: paths=source_relative

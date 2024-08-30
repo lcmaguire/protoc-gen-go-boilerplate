@@ -5,6 +5,7 @@ import (
 	"embed"
 	"flag"
 	"go/format"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -15,36 +16,29 @@ import (
 
 // todo will need custom register of embeded files for types.
 
-//go:embed templates/method.unary.go.tpl
+//go:embed templates/method.unary.go.tmpl
 var defaultUnaryMethodTemplate embed.FS
 
-//go:embed templates/method.client.stream.go.tpl
-var defaultClientStreamingMethod embed.FS
-
-//go:embed templates/method.server.stream.go.tpl
-var defaultServerStreamingMethod embed.FS
-
-//go:embed templates/method.bidi.stream.go.tpl
-var defaultBidiStreamingMethod embed.FS
-
-//go:embed templates/connect
-var connectTemplates embed.FS
-
-//go:embed templates/service.go.tpl
+//go:embed templates/service.go.tmpl
 var defaultServiceTemplate embed.FS
 
-const (
-	defaultUnaryMethodFilePath           = "templates/method.unary.go.tpl"
-	defaultClientStreamingMethodFilePath = "templates/method.client.stream.go.tpl"
-	defaultServerStreamingMethodFilePath = "templates/method.server.stream.go.tpl"
-	defaultBidiStreamingMethodFilePath   = "templates/method.bidi.stream.go.tpl"
-	defaultServiceFilePath               = "templates/service.go.tpl"
+//go:embed templates/*
+var grpcTemplates embed.FS
 
-	defaultConnectUnaryMethodFilePath           = "templates/connect/connect.method.unary.go.tpl"
-	defaultConnectClientStreamingMethodFilePath = "templates/connect/connect.method.client.stream.go.tpl"
-	defaultConnectServerStreamingMethodFilePath = "templates/connect/connect.stream.go.tpl"
-	defaultConnectBidiStreamingMethodFilePath   = "templates//connect/connect.stream.go.tpl"
-	defaultConnectServiceFilePath               = "templates/connect/connect.service.go.tpl"
+//go:embed templates/connect/*
+var connectTemplates embed.FS
+
+const (
+	// default dirPath
+	defaultDir = "templates"
+
+	unaryMethodSuffix        = "method.unary.go.tmpl"
+	serverStreamMethodSuffix = "method.server.stream.go.tmpl"
+	clientStreamMethodSuffix = "method.client.stream.go.tmpl"
+	bidiStreamMethodSuffix   = "method.bidi.stream.go.tmpl"
+
+	defaultServiceFilePath = "templates/service.go.tmpl"
+	serviceSuffix          = "service.go.tmpl"
 )
 
 func main() {
@@ -55,10 +49,19 @@ func main() {
 	bidiStreamMethodTemplate := flags.String("bidiStreamMethodTemplate", "", "custom method template")
 	customServiceTemplate := flags.String("serviceTemplate", "", "custom service template")
 
+	directoryOverride := flags.String("templateDirectory", defaultDir, "custom directory for templates")
+
 	protogen.Options{
 		ParamFunc: flags.Set,
 	}.Run(func(gen *protogen.Plugin) error {
 		gen.SupportedFeatures = uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
+
+		// will user `templates` as the default dir.
+		// if populated will overide to be the provided directory.
+		directory := defaultDir
+		if directoryOverride != nil {
+			directory = *directoryOverride
+		}
 
 		for _, file := range gen.Files {
 			if !file.Generate {
@@ -66,6 +69,7 @@ func main() {
 			}
 
 			for _, service := range file.Services {
+				// todo have it be prefixed by service.GoName/
 				sf := gen.NewGeneratedFile("service.go", ".")
 				sf.P("package " + file.GoPackageName)
 
@@ -92,10 +96,7 @@ func main() {
 						Method:         method,
 					}
 
-					// Will handle selecting appropriate template for method(s)
-					// based upon if they are unary or a streaming rpc.
-					methodTemplate := defaultUnaryMethodTemplate
-					methodFile := defaultUnaryMethodFilePath
+					methodFile := filepath.Join(directory, unaryMethodSuffix)
 					override := ""
 					if customUnaryMethodTemplate != nil {
 						override = *customUnaryMethodTemplate
@@ -103,26 +104,23 @@ func main() {
 
 					switch {
 					case method.Desc.IsStreamingServer() && method.Desc.IsStreamingClient():
-						methodFile = defaultBidiStreamingMethodFilePath
-						methodTemplate = defaultBidiStreamingMethod
+						methodFile = filepath.Join(directory, bidiStreamMethodSuffix)
 						if bidiStreamMethodTemplate != nil {
 							override = *bidiStreamMethodTemplate
 						}
 					case method.Desc.IsStreamingServer():
-						methodFile = defaultServerStreamingMethodFilePath
-						methodTemplate = defaultServerStreamingMethod
+						methodFile = filepath.Join(directory, serverStreamMethodSuffix)
 						if clientStreamMethodTemplate != nil {
 							override = *serverStreamMethodTemplate
 						}
 					case method.Desc.IsStreamingClient():
-						methodFile = defaultClientStreamingMethodFilePath
-						methodTemplate = defaultClientStreamingMethod
+						methodFile = filepath.Join(directory, clientStreamMethodSuffix)
 						if serverStreamMethodTemplate != nil {
 							override = *clientStreamMethodTemplate
 						}
 					}
 
-					methodBites, err := m.RunTemplate(methodTemplate, methodFile, override)
+					methodBites, err := m.RunTemplate(methodFile, override)
 					if err != nil {
 						return err
 					}
@@ -140,15 +138,15 @@ func main() {
 					ServiceGoImportPath: file.GoDescriptorIdent.String(),
 					ConnectGoImportPath: connectPath(file).String(),
 					FileGoPkgName:       string(file.GoPackageName),
-					ServiceGoPkg:        pkgIdent,
 					ServiceName:         service.GoName,
-					Ident:               pkgIdent,
 					ServerFullName:      string(service.Desc.FullName()),
 					Methods:             methods,
 					Service:             service,
 				}
 
-				serviceBites, err := s.RunTemplate(*customServiceTemplate)
+				serviceFile := filepath.Join(directory, serviceSuffix)
+
+				serviceBites, err := s.RunTemplate(serviceFile, *customServiceTemplate)
 				if err != nil {
 					return err
 				}
@@ -196,13 +194,14 @@ func messageImportPath(in *protogen.Message, f *protogen.GeneratedFile) string {
 	return f.QualifiedGoIdent(in.GoIdent)
 }
 
-func generateTemplateData(data any, embededFile embed.FS, defaultPath string, filePath ...string) (string, error) {
+func generateTemplateData(data any, defaultPath string, filePath ...string) (string, error) {
 	var templ *template.Template
 	var err error
 
 	// if no override is provided will use default.
 	if len(filePath) == 0 || filePath[0] == "" {
-		templ, err = template.ParseFS(embededFile, defaultPath)
+		//templ, err = template.ParseFS(embededFile, defaultPath)
+		templ, err = template.ParseFiles(defaultPath)
 	} else {
 		templ, err = template.ParseFiles(filePath...)
 	}
