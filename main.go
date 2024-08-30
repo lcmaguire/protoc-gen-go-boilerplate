@@ -78,6 +78,7 @@ func main() {
 				sf.Import(file.GoImportPath)
 
 				// generate service struct for go-grpc.
+				// gets alias of file.GoDescriptorIdent
 				pkgIdent := strings.Split(ident, ".")[0]
 
 				methods := make([]Method, 0, len(service.Methods))
@@ -142,6 +143,7 @@ func main() {
 					ServerFullName:      string(service.Desc.FullName()),
 					Methods:             methods,
 					Service:             service,
+					Ident:               pkgIdent,
 				}
 
 				serviceFile := filepath.Join(directory, serviceSuffix)
