@@ -69,9 +69,9 @@ func main() {
 			}
 
 			for _, service := range file.Services {
-				// todo have it be prefixed by service.GoName/
-				sf := gen.NewGeneratedFile("service.go", ".")
-				sf.P("package " + file.GoPackageName)
+				serviceFileName := strings.ToLower(filepath.Join(service.GoName, "service.go"))
+				sf := gen.NewGeneratedFile(serviceFileName, ".")
+				//sf.P("package " + file.GoPackageName) // todo move this into template.
 
 				// imports
 				ident := sf.QualifiedGoIdent(file.GoDescriptorIdent)
@@ -84,8 +84,9 @@ func main() {
 				methods := make([]Method, 0, len(service.Methods))
 
 				for _, method := range service.Methods {
-					nf := gen.NewGeneratedFile(strings.ToLower(method.GoName)+".go", ".")
-					nf.P("package " + file.GoPackageName)
+					fileName := strings.ToLower(filepath.Join(service.GoName, method.GoName+".go"))
+					nf := gen.NewGeneratedFile(fileName, ".")
+					// nf.P("package " + file.GoPackageName)
 
 					m := Method{
 						MethodName:     method.GoName,
@@ -127,7 +128,7 @@ func main() {
 					}
 					nf.P(methodBites)
 					// will tidy the imports of the generated method file.
-					err = tidyImports(gen, nf, imports.LocalPrefix+strings.ToLower(method.GoName)+".go")
+					err = tidyImports(gen, nf, fileName)
 					if err != nil {
 						return err
 					}
@@ -155,7 +156,7 @@ func main() {
 				sf.P(serviceBites)
 
 				// will tidy the imports of the generated service file.
-				err = tidyImports(gen, sf, imports.LocalPrefix+"service.go")
+				err = tidyImports(gen, sf, serviceFileName)
 				if err != nil {
 					return err
 				}
