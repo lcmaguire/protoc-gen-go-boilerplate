@@ -125,6 +125,7 @@ func main() {
 					methods = append(methods, m)
 				}
 
+				// todo handle []Service.
 				s := Service{
 					ServiceGoImportPath: file.GoDescriptorIdent.String(),
 					ConnectGoImportPath: connectPath(file).String(),
