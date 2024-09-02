@@ -12,6 +12,8 @@ type Method struct {
 	//
 	// example.service.MethodName
 	MethodFullName string
+	// FileGoPkgName go package for the file.
+	FileGoPkgName string
 	// ServiceName is the name of the service to which the method belongs.
 	ServiceName string
 	// Ident the file pkg name.
@@ -22,9 +24,4 @@ type Method struct {
 	ResponseName string
 	// Method *protogen.Method.
 	Method *protogen.Method
-}
-
-// RunTemplate will execute the template.
-func (m Method) RunTemplate(defaultPath string, filePath ...string) (string, error) {
-	return generateTemplateData(m, defaultPath, filePath...)
 }

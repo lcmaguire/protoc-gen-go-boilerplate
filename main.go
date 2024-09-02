@@ -45,7 +45,7 @@ func main() {
 		gen.SupportedFeatures = uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
 
 		// will user `templates` as the default dir.
-		// if populated will overide to be the provided directory.
+		// if populated will override to be the provided directory.
 		directory := defaultDir
 		if directoryOverride != nil {
 			directory = *directoryOverride
@@ -84,8 +84,10 @@ func main() {
 						ResponseName:   messageImportPath(method.Output, nf),
 						Ident:          pkgIdent,
 						Method:         method,
+						FileGoPkgName:  string(file.GoPackageName),
 					}
 
+					// get the appropriate suffix & the override template when applicable.
 					methodSuffix := ""
 					var overrideFile *string
 					switch {
@@ -193,26 +195,4 @@ func tidyImports(gen *protogen.Plugin, generatedFile *protogen.GeneratedFile, fi
 // assumption this is always going to be in a different package.
 func messageImportPath(in *protogen.Message, f *protogen.GeneratedFile) string {
 	return f.QualifiedGoIdent(in.GoIdent)
-}
-
-func generateTemplateData(data any, defaultPath string, filePath ...string) (string, error) {
-	var templ *template.Template
-	var err error
-
-	// if no override is provided will use default.
-	if len(filePath) == 0 || filePath[0] == "" {
-		//templ, err = template.ParseFS(embededFile, defaultPath)
-		templ, err = template.ParseFiles(defaultPath)
-	} else {
-		templ, err = template.ParseFiles(filePath...)
-	}
-
-	if err != nil {
-		return "", err
-	}
-	buffy := bytes.NewBuffer([]byte{})
-	if err := templ.Execute(buffy, data); err != nil {
-		return "", err
-	}
-	return buffy.String(), nil
 }
