@@ -54,6 +54,6 @@ func map{{.MethodName}}InputToInternal(ctx context.Context, in *temp.Example) (a
 	return nil, nil
 }
 
-func prepare{{.MethodName}}Response(ctx context.Context, downstreamResponse any, internalType any, databaseType any, postDbDownstreamResponse any) (*temp.Example, error) {
+func prepare{{.MethodName}}Response(ctx context.Context, downstreamResponse any, internalType any, databaseType any, postDbDownstreamResponse any) (*{{ .ResponseName}}, error) {
 	return nil, nil
 }

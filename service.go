@@ -10,10 +10,10 @@ type Service struct {
 	ServiceGoImportPath string
 	// ConnectGoImportPath generated connect import path.
 	ConnectGoImportPath string
-	// FileGoPkgName ...
+	// FileGoPkgName go package for the file.
 	FileGoPkgName string
 	// ServiceGoPkg last dir in package.
-	ServiceGoPkg string
+	ServiceGoPkg string // todo delete this.
 	// ServiceName
 	ServiceName string
 	// Ident the file pkg name.
@@ -24,8 +24,4 @@ type Service struct {
 	Methods []Method
 	// Service the protogen Service.
 	Service *protogen.Service
-}
-
-func (s Service) RunTemplate(filePath ...string) (string, error) {
-	return generateTemplateData(s, defaultServiceTemplate, defaultServiceFilePath, filePath...)
 }

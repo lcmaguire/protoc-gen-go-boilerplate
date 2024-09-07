@@ -1,9 +1,9 @@
 
 import (
- {{.ConnectGoImportPath}}
+connectAlias {{.ConnectGoImportPath}}
 )
 
 // Service connect implementation of {{.ServerFullName}}.
 type Service struct {
-{{.ServiceGoPkg}}connect.Unimplemented{{.ServiceName}}Handler
+connectAlias.Unimplemented{{.ServiceName}}Handler
 }

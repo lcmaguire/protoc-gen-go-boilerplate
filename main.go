@@ -5,6 +5,7 @@ import (
 	"embed"
 	"flag"
 	"go/format"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -13,38 +14,19 @@ import (
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
-// todo will need custom register of embeded files for types.
-
-//go:embed templates/method.unary.go.tpl
-var defaultUnaryMethodTemplate embed.FS
-
-//go:embed templates/method.client.stream.go.tpl
-var defaultClientStreamingMethod embed.FS
-
-//go:embed templates/method.server.stream.go.tpl
-var defaultServerStreamingMethod embed.FS
-
-//go:embed templates/method.bidi.stream.go.tpl
-var defaultBidiStreamingMethod embed.FS
-
-//go:embed templates/connect
-var connectTemplates embed.FS
-
-//go:embed templates/service.go.tpl
-var defaultServiceTemplate embed.FS
+//go:embed templates/*
+var embeddedTemplates embed.FS
 
 const (
-	defaultUnaryMethodFilePath           = "templates/method.unary.go.tpl"
-	defaultClientStreamingMethodFilePath = "templates/method.client.stream.go.tpl"
-	defaultServerStreamingMethodFilePath = "templates/method.server.stream.go.tpl"
-	defaultBidiStreamingMethodFilePath   = "templates/method.bidi.stream.go.tpl"
-	defaultServiceFilePath               = "templates/service.go.tpl"
+	// default dirPath
+	defaultDir = "templates"
 
-	defaultConnectUnaryMethodFilePath           = "templates/connect/connect.method.unary.go.tpl"
-	defaultConnectClientStreamingMethodFilePath = "templates/connect/connect.method.client.stream.go.tpl"
-	defaultConnectServerStreamingMethodFilePath = "templates/connect/connect.stream.go.tpl"
-	defaultConnectBidiStreamingMethodFilePath   = "templates//connect/connect.stream.go.tpl"
-	defaultConnectServiceFilePath               = "templates/connect/connect.service.go.tpl"
+	unaryMethodSuffix        = "method.unary.go.tmpl"
+	serverStreamMethodSuffix = "method.server.stream.go.tmpl"
+	clientStreamMethodSuffix = "method.client.stream.go.tmpl"
+	bidiStreamMethodSuffix   = "method.bidi.stream.go.tmpl"
+
+	serviceSuffix = "service.go.tmpl"
 )
 
 func main() {
@@ -55,10 +37,19 @@ func main() {
 	bidiStreamMethodTemplate := flags.String("bidiStreamMethodTemplate", "", "custom method template")
 	customServiceTemplate := flags.String("serviceTemplate", "", "custom service template")
 
+	directoryOverride := flags.String("templateDirectory", defaultDir, "custom directory for templates")
+
 	protogen.Options{
 		ParamFunc: flags.Set,
 	}.Run(func(gen *protogen.Plugin) error {
 		gen.SupportedFeatures = uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
+
+		// will user `templates` as the default dir.
+		// if populated will override to be the provided directory.
+		directory := defaultDir
+		if directoryOverride != nil {
+			directory = *directoryOverride
+		}
 
 		for _, file := range gen.Files {
 			if !file.Generate {
@@ -66,7 +57,8 @@ func main() {
 			}
 
 			for _, service := range file.Services {
-				sf := gen.NewGeneratedFile("service.go", ".")
+				serviceFileName := strings.ToLower(filepath.Join(service.GoName, "service.go"))
+				sf := gen.NewGeneratedFile(serviceFileName, ".")
 				sf.P("package " + file.GoPackageName)
 
 				// imports
@@ -74,12 +66,14 @@ func main() {
 				sf.Import(file.GoImportPath)
 
 				// generate service struct for go-grpc.
+				// gets alias of file.GoDescriptorIdent
 				pkgIdent := strings.Split(ident, ".")[0]
 
 				methods := make([]Method, 0, len(service.Methods))
 
 				for _, method := range service.Methods {
-					nf := gen.NewGeneratedFile(strings.ToLower(method.GoName)+".go", ".")
+					fileName := strings.ToLower(filepath.Join(service.GoName, method.GoName+".go"))
+					nf := gen.NewGeneratedFile(fileName, ".")
 					nf.P("package " + file.GoPackageName)
 
 					m := Method{
@@ -90,45 +84,40 @@ func main() {
 						ResponseName:   messageImportPath(method.Output, nf),
 						Ident:          pkgIdent,
 						Method:         method,
+						FileGoPkgName:  string(file.GoPackageName),
 					}
 
-					// Will handle selecting appropriate template for method(s)
-					// based upon if they are unary or a streaming rpc.
-					methodTemplate := defaultUnaryMethodTemplate
-					methodFile := defaultUnaryMethodFilePath
-					override := ""
-					if customUnaryMethodTemplate != nil {
-						override = *customUnaryMethodTemplate
-					}
-
+					// get the appropriate suffix & the override template when applicable.
+					methodSuffix := ""
+					var overrideFile *string
 					switch {
 					case method.Desc.IsStreamingServer() && method.Desc.IsStreamingClient():
-						methodFile = defaultBidiStreamingMethodFilePath
-						methodTemplate = defaultBidiStreamingMethod
-						if bidiStreamMethodTemplate != nil {
-							override = *bidiStreamMethodTemplate
-						}
+						methodSuffix = bidiStreamMethodSuffix
+						overrideFile = bidiStreamMethodTemplate
 					case method.Desc.IsStreamingServer():
-						methodFile = defaultServerStreamingMethodFilePath
-						methodTemplate = defaultServerStreamingMethod
-						if clientStreamMethodTemplate != nil {
-							override = *serverStreamMethodTemplate
-						}
+						methodSuffix = serverStreamMethodSuffix
+						overrideFile = serverStreamMethodTemplate
 					case method.Desc.IsStreamingClient():
-						methodFile = defaultClientStreamingMethodFilePath
-						methodTemplate = defaultClientStreamingMethod
-						if serverStreamMethodTemplate != nil {
-							override = *clientStreamMethodTemplate
-						}
+						methodSuffix = clientStreamMethodSuffix
+						overrideFile = clientStreamMethodTemplate
+					default:
+						methodSuffix = unaryMethodSuffix
+						overrideFile = customUnaryMethodTemplate
 					}
 
-					methodBites, err := m.RunTemplate(methodTemplate, methodFile, override)
+					currentTemplate, err := loadTemplates(directory, methodSuffix, overrideFile)
 					if err != nil {
 						return err
 					}
-					nf.P(methodBites)
+
+					buffy := bytes.NewBuffer([]byte{})
+					if err := currentTemplate.Execute(buffy, m); err != nil {
+						return err
+					}
+
+					nf.P(buffy.String())
 					// will tidy the imports of the generated method file.
-					err = tidyImports(gen, nf, imports.LocalPrefix+strings.ToLower(method.GoName)+".go")
+					err = tidyImports(gen, nf, fileName)
 					if err != nil {
 						return err
 					}
@@ -136,26 +125,31 @@ func main() {
 					methods = append(methods, m)
 				}
 
+				// todo handle []Service.
 				s := Service{
 					ServiceGoImportPath: file.GoDescriptorIdent.String(),
 					ConnectGoImportPath: connectPath(file).String(),
 					FileGoPkgName:       string(file.GoPackageName),
-					ServiceGoPkg:        pkgIdent,
 					ServiceName:         service.GoName,
-					Ident:               pkgIdent,
 					ServerFullName:      string(service.Desc.FullName()),
 					Methods:             methods,
 					Service:             service,
+					Ident:               pkgIdent,
 				}
 
-				serviceBites, err := s.RunTemplate(*customServiceTemplate)
+				serviceT, err := loadTemplates(directory, serviceSuffix, customServiceTemplate)
 				if err != nil {
 					return err
 				}
-				sf.P(serviceBites)
+
+				buffy := bytes.NewBuffer([]byte{})
+				if err := serviceT.Execute(buffy, s); err != nil {
+					return err
+				}
+				sf.P(buffy.String())
 
 				// will tidy the imports of the generated service file.
-				err = tidyImports(gen, sf, imports.LocalPrefix+"service.go")
+				err = tidyImports(gen, sf, serviceFileName)
 				if err != nil {
 					return err
 				}
@@ -163,6 +157,14 @@ func main() {
 		}
 		return nil
 	})
+}
+
+func loadTemplates(dir string, suffix string, override *string) (*template.Template, error) {
+	if override != nil && len(*override) > 0 {
+		return template.ParseFiles(*override)
+	}
+
+	return template.ParseFS(embeddedTemplates, filepath.Join(dir, suffix))
 }
 
 // tidyImports will format imports into one import group and will remove any unused imports.
@@ -194,25 +196,4 @@ func tidyImports(gen *protogen.Plugin, generatedFile *protogen.GeneratedFile, fi
 // assumption this is always going to be in a different package.
 func messageImportPath(in *protogen.Message, f *protogen.GeneratedFile) string {
 	return f.QualifiedGoIdent(in.GoIdent)
-}
-
-func generateTemplateData(data any, embededFile embed.FS, defaultPath string, filePath ...string) (string, error) {
-	var templ *template.Template
-	var err error
-
-	// if no override is provided will use default.
-	if len(filePath) == 0 || filePath[0] == "" {
-		templ, err = template.ParseFS(embededFile, defaultPath)
-	} else {
-		templ, err = template.ParseFiles(filePath...)
-	}
-
-	if err != nil {
-		return "", err
-	}
-	buffy := bytes.NewBuffer([]byte{})
-	if err := templ.Execute(buffy, data); err != nil {
-		return "", err
-	}
-	return buffy.String(), nil
 }
